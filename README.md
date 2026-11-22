@@ -181,7 +181,7 @@ Its solutions, with existence and stability as computed in the code:
 |---|---|---|
 | H | $A=0$ | stable iff $\eta^1<0$ and $K_1<0$: below the pitchfork (D&K 3.11) and the Hopf bifurcation (D&K 3.12) |
 | PS | $A=r$, $r^2=-\eta^1/\Gamma$ (D&K 3.13) | stable ($\Gamma<0$, $\eta^1>0$) where $\Gamma K_1>M\eta^1$ and $\Gamma K_1>D\eta^1$: beyond its Hopf bifurcation (D&K 3.17) and its drift instability (D&K 3.16) |
-| T (TW) | $A=re^{i\Omega T}$, $r^2=-K_1/(K_2-K_3)$ (D&K 3.18) | exists where $r^2>0$ and $\Omega^2=-\eta^1-\Gamma r^2>0$; unstable wherever it exists |
+| T (TW) | $A=re^{i\Omega T}$, $r^2=-K_1/(K_2-K_3)$ (D&K 3.18) | exists where $r^2>0$ and $\Omega^2=-\eta^1-\Gamma r^2>0$|
 | CP and MPS | periodic orbits with $J=0$ | see below |
 
 The solutions, their stability and the bifurcation conditions are those of Dangelmayr & Knobloch (D&K), *The
