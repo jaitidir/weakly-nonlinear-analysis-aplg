@@ -1,4 +1,4 @@
-# Cahn–Hilliard notebook: time stepping against the weakly nonlinear steady state (φ0 = 0.1 and 0.5), bifurcation
+# Cahn–Hilliard notebook: Newton steady profiles against the weakly nonlinear steady state (φ0 = 0.1 and 0.5), bifurcation
 # diagrams of the supercritical (φ0 = 0.1) and subcritical (φ0 = 0.5) cases, and the fold near the tricritical point
 # (φ0 ≈ 0.446).
 include(joinpath(@__DIR__, "common.jl"))
@@ -43,7 +43,7 @@ function wnl_fold(gamma1, mu1, δ, kC, phi0)
 end
 
 # ==================================================================================================================
-# Time stepping (convex splitting) and steady states (Newton with deflation, gamma sweeps)
+# Steady states (Newton with deflation, gamma sweeps)
 # ==================================================================================================================
 
 # Second-order finite-difference Laplacian with periodic boundary conditions
@@ -456,7 +456,7 @@ function profiles_figure(runs)
     panels = map(zip(runs, (L"\mathrm{(a)}", L"\mathrm{(b)}"))) do (r, tag)
         kC = 2π / r.L
         wnl = wnl_profile(r.x, r.phi0, r.gamma1, r.δ, kC)  # weakly nonlinear steady state (or the flat phi0)
-        p = paper_axes(tag; xlabel=L"x", xlims=(0, r.L))
+        p = paper_axes(tag; xlabel=L"x", ylabel=L"\rho", xlims=(0, r.L))
         plot!(p, r.x, r.phi; num_style(true)...)  # steady state of the numerical continuation (Newton)
         plot!(p, r.x, wnl; wnl_style(3kC^2 > 6r.phi0^2)...)  # stable style if supercritical
     end
@@ -471,7 +471,7 @@ function bifurcation_panel(gammas, amps, x, phi0, δ, L, tag)
     kC = 2π / L
     gammaC = 3 * phi0^2 + kC^2
     gmin, gmax = extrema(gammas)
-    p = paper_axes(tag; xlabel=L"\gamma", ylabel=L"\Delta\phi/\phi_0", xlims=(gmin, gmax))
+    p = paper_axes(tag; xlabel=L"\gamma", ylabel=L"\Delta\rho/\phi", xlims=(gmin, gmax))
     plot_homogeneous!(p, gmin, gmax, gammaC)
 
     pat = amps .> 1e-5  # patterned states only
@@ -501,7 +501,7 @@ function fold_figure(br, P)
     # gamma only moves by O(1e-5): a grid line every 5e-6, a label every 1e-5, no offset
     xt = collect(ceil(gamma_min / 5e-6) * 5e-6 : 5e-6 : gamma_max)
     xl = [iseven(round(Int, t / 5e-6)) ? latexstring(@sprintf("%.5f", t)) : "" for t in xt]
-    p = paper_axes(; xlabel=L"\gamma", ylabel=L"\Delta\phi/\phi_0", xlims=(gamma_min, gamma_max), xticks=(xt, xl))
+    p = paper_axes(; xlabel=L"\gamma", ylabel=L"\Delta\rho/\phi", xlims=(gamma_min, gamma_max), xticks=(xt, xl))
 
     # branch from the bifurcation point (gammaC, 0), taken as unstable
     gb, ab, sb = vcat(gammaC, br.gamma), vcat(0.0, br.amp), vcat(false, br.stable)

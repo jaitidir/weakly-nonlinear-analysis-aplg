@@ -156,6 +156,19 @@ function jacobian_deflated(Z, p::Params, mfix::Float64; N::Float64=1, eps::Float
     return sparse(J ./ d^(1/N) .- sparse(R * transpose(v)) .* (1/N) ./ d^(1/N + 2))
 end
 
+# Newton step of the deflated system (N = 1): the solution of jacobian_deflated(Z) dZ = -G, i.e. (A + u vᵀ) dZ = -G with
+# A = J/d sparse and the dense rank-one term u vᵀ = -R vᵀ/d³, by one sparse LU of A and the Sherman–Morrison formula
+# (the same step as a factorisation of the whole deflated Jacobian, whose rank-one term fills it completely: much
+# faster on fine grids)
+function deflated_newton_step(Z, p::Params, mfix::Float64, G; eps::Float64=1e-14)
+    R = residual_aug(Z, p, mfix)
+    v = Z .- homogeneous_state_aug(p)
+    d = max(norm(v), eps)
+    F = lu(jacobian_aug(Z, p, mfix) ./ d)
+    y = F \ (-G); w = F \ (-R ./ d^3)
+    return y .- w .* (dot(v, y) / (1 + dot(v, w)))
+end
+
 # Damped Newton for the deflated steady system, from U0 with the pin m[1] = mfix: returns (Z, converged, iterations,
 # residual)
 function newton_aug(U0, p; tol=1e-10, maxiter=35, mfix=nothing)
@@ -163,8 +176,7 @@ function newton_aug(U0, p; tol=1e-10, maxiter=35, mfix=nothing)
     Z = pack_aug(copy(U0), 0.0, 0.0, 0.0)                       # multipliers start at 0
     G = residual_deflated(Z, p, mfix, N=1.0)
     for k in 1:maxiter
-        J = jacobian_deflated(Z, p, mfix, N=1.0)
-        dZ = -(lu(J) \ G)
+        dZ = deflated_newton_step(Z, p, mfix, G)
         alpha = 1.0
         Gnorm = norm(G)
         accepted = false
@@ -438,9 +450,10 @@ end
 # goes around folds. residual(Z, φa) and jacobian(Z, φa) give F and dF/dZ, φa enters row dphia_row as -1, and
 # result(Z, φa, iterations, residual) builds the stored solution. skip: an entry of Z left out of the tangent and
 # extrapolated by the secant instead (the period T of a travelling wave, which diverges where c -> 0); pinv_fallback:
-# use the minimum-norm step where the bordered Jacobian is singular.
+# use the minimum-norm step where the bordered Jacobian is singular. sparse_solve: factorise the bordered Jacobian as a
+# sparse matrix (the same linear system; much faster on fine grids) instead of a dense one.
 function continue_arclength_generic(sol0, sol1, residual, jacobian, result; dphia_row, ds=0.01, n_steps=100, tol=1e-10,
-                                    maxiter=30, skip=nothing, pinv_fallback=false)
+                                    maxiter=30, skip=nothing, pinv_fallback=false, sparse_solve=false)
     sols = Any[(phia=sol0.phia, res=sol0.res), (phia=sol1.phia, res=sol1.res)]
     Zprev, ϕaprev = sol0.res.Z, sol0.phia
     Zcur, ϕacur = sol1.res.Z, sol1.phia
@@ -467,6 +480,12 @@ function continue_arclength_generic(sol0, sol1, residual, jacobian, result; dphi
                 break
             end
             dFdphia = zeros(M); dFdphia[dphia_row] = -1.0
+            if sparse_solve  # bordered Jacobian [dF/dZ  dF/dφa; tZᵀ  tϕa] (sparse)
+                As = [sparse(jacobian(Z, ϕa)) sparse_col(dFdphia); sparse_row(tZ) sparse([tϕa;;])]
+                delta = lu(As) \ (-vcat(F, arc))
+                Z .+= delta[1:M]; ϕa += delta[M+1]; it_used = k
+                continue
+            end
             # bordered Jacobian [dF/dZ  dF/dφa; tZᵀ  tϕa] (dense)
             A = zeros(M + 1, M + 1)
             A[1:M, 1:M] = Matrix(jacobian(Z, ϕa))
@@ -505,7 +524,7 @@ function continue_arclength(sol0, sol1, p::Params, ϕ, mfix; ds=0.01, n_steps=10
     return continue_arclength_generic(sol0, sol1, (Z, ϕa) -> residual_aug(Z, P(ϕa), mfix),
                                       (Z, ϕa) -> jacobian_aug(Z, P(ϕa), mfix),
                                       (Z, ϕa, it, resn) -> steady_result(Z, P(ϕa); it=it, resn=resn);
-                                      dphia_row=3p.Nx + 2, ds=ds, n_steps=n_steps, tol=tol, maxiter=maxiter)
+                                      dphia_row=3p.Nx + 2, ds=ds, n_steps=n_steps, tol=tol, maxiter=maxiter, sparse_solve=true)
 end
 
 # Travelling-wave branch (around folds and through c = 0)

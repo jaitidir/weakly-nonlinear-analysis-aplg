@@ -209,20 +209,21 @@ const SWEEP_POINTS = Dict(0.7 => (n=10, add=[0.5645, 0.567], remove=Float64[]),
 # travelling-mode perturbations "non-symmetric" (A⁺, A⁻) = (1, 0), "double" (1, 1) and "biased" (2, 1). Each run stops
 # once the recurrence classifier has converged (budget 2·10⁵: near onset at φ = 0.88 the runs converge to T only after
 # up to ~1.3·10⁵ time units).
-function timestepping_sweep(ϕ, window)
+# (mapper: how the independent runs are executed, map by default; e.g. Distributed.pmap runs them on several processes
+# with the same results, in the same order)
+function timestepping_sweep(ϕ, window; mapper=map)
     S = SWEEP_POINTS[ϕ]
     phia_ts = collect(range(window...; length=S.n))  # n evenly spaced φa
     # remove: the grid point nearest each listed φa is dropped before any run (it is never computed)
     for r in S.remove; deleteat!(phia_ts, argmin(abs.(phia_ts .- r))); end
     phia_ts = sort(unique(vcat(phia_ts, S.add)))  # plus the added points, sorted
-    # one entry per run: initial condition, φa, final type, converged flag, Δρ, Δρa, Δm
-    out = (pert=String[], phia=Float64[], type=Symbol[], converged=Bool[], drho=Float64[], drhoa=Float64[], dm=Float64[])
-    for pert in ("rand", "non-symmetric", "double", "biased"), ϕa in phia_ts  # every IC at every φa
-        r = sweep_run(ϕ, ϕa, pert)
-        push!(out.pert, pert); push!(out.phia, ϕa); push!(out.type, r.sol_type); push!(out.converged, r.converged)
-        push!(out.drho, r.drho_eff); push!(out.drhoa, r.drhoa_eff); push!(out.dm, r.dm_eff)
-    end
-    return out
+    jobs = [(pert, ϕa) for pert in ("rand", "non-symmetric", "double", "biased") for ϕa in phia_ts]  # every IC at every φa
+    # summary of each run (the whole history is saved by sweep_run)
+    rs = mapper(j -> (r = sweep_run(ϕ, j[2], j[1]); (r.sol_type, r.converged, r.drho_eff, r.drhoa_eff, r.dm_eff, r.sol_types)), jobs)
+    # one entry per run: initial condition, φa, final type (of ρ), converged flag (all three fields), Δρ, Δρa, Δm, and
+    # the types of ρ, ρa and m
+    return (pert=first.(jobs), phia=last.(jobs), type=getindex.(rs, 1), converged=Vector{Bool}(getindex.(rs, 2)), drho=getindex.(rs, 3),
+            drhoa=getindex.(rs, 4), dm=getindex.(rs, 5), types=getindex.(rs, 6))
 end
 
 # One run of the sweep at (φ, φa) from initial condition pert, its whole history saved in data/oscillatory/runs
@@ -234,7 +235,8 @@ function sweep_run(ϕ, ϕa, pert)
                      pert_qc=qc, pert_vp=vp, pert_vm=vm, pert_Ap=2.0, pert_Am=1.0, seed=1, save_interval=20.0,
                      record_interval=HISTORY)
     save_history(@sprintf("oscillatory/runs/phi%s/%s/phia=%.6f.jld2", ϕ, pert, ϕa), r; ϕ, ϕa, Pe=PE, Lx=LX, pert)
-    @printf("  %-13s φa = %.5f: %s (converged %s, t = %.0f)\n", pert, ϕa, r.sol_type, r.converged, r.t)
+    @printf("  %-13s φa = %.5f: %s (converged %s, t = %.0f)%s\n", pert, ϕa, r.sol_type, r.converged, r.t,
+            allequal(r.sol_types) ? "" : "  types of ρ, ρa, m differ: $(r.sol_types)")
     return r
 end
 

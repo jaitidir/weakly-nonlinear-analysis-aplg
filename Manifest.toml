@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "1c7dc858bc9f05aa3101b581d893359e56f30a80"
+project_hash = "cdae6ac495bd0618ce04a5ba789f4a46a646a47e"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -1716,9 +1716,9 @@ version = "2.6.1"
 
 [[deps.StableRNGs]]
 deps = ["Random"]
-git-tree-sha1 = "4f96c596b8c8258cc7d3b19797854d368f243ddc"
+git-tree-sha1 = "448c4447d4e21ad257d862afec062b66d4f639eb"
 uuid = "860ef19b-820b-49d6-a774-d7a799459cd3"
-version = "1.0.4"
+version = "1.1.0"
 
 [[deps.StaticArraysCore]]
 git-tree-sha1 = "6ab403037779dae8c514bad259f32a447262455a"

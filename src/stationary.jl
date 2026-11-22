@@ -32,18 +32,22 @@ function onsets(ϕ; Pe=PE_STAT, Lx=LX)
 end
 
 # Branch with n wavelengths (n = 2, 3; and n = 1 at φ = 0.81) of the supercritical-type scan: Newton continuation
-# from ϕac + eps_max down to the onset, and its weakly nonlinear amplitudes
-function stationary_branch(ϕ, n; Nx, eps_max=0.035, eps_min=0.0, min_step=1e-10)
+# from ϕac + eps_max down to the onset, and its weakly nonlinear amplitudes. tol: Newton tolerance on the residual norm
+# (round-off sets a floor that grows with Nx and near the onset: about 1e-10 to 3e-10 at Nx = 2000)
+function stationary_branch(ϕ, n; Nx, eps_max=0.035, eps_min=0.0, min_step=1e-10, tol=1e-10)
     qc, ϕac, ϕ2ac, ϕ3ac = onsets(ϕ)
     onset = (ϕac, ϕ2ac, ϕ3ac)[n]  # onset of the branch with n wavelengths
     # Newton continuation at wavenumber n qc, φa = onset + ε for ε from eps_max down to eps_min
-    b = bifurcation_scan(ϕ, PE_STAT, LX, Nx, n * qc, onset, 1.0; eps_max=eps_max, eps_min=eps_min, min_step=min_step)
+    b = bifurcation_scan(ϕ, PE_STAT, LX, Nx, n * qc, onset, 1.0; eps_max=eps_max, eps_min=eps_min, min_step=min_step,
+                         tol=tol)
     return merge(b, (onset=onset,))  # fields of bifurcation_scan plus the onset
 end
 
 # Subcritical branch with one wavelength at φ: from a weakly nonlinear seed near onset along φa to the fold (the
 # unstable part), then by arclength continuation around the fold (the stable part). Peak-to-peak amplitudes of both.
-function subcritical_branch(ϕ; Nx=200)
+# The arclength step is 0.005 at Nx = 200 and scales as √Nx, since the norm of the state grows as √Nx: the same step
+# along the branch for every Nx. tol: as in stationary_branch.
+function subcritical_branch(ϕ; Nx=200, tol=1e-10)
     qc, ϕac = find_qc_and_phiac(ϕ, PE_STAT, LX)
     bd = branch_sign(ϕ, PE_STAT, qc, ϕac, 1.0)  # -1: the branch exists for φa < ϕac (subcritical)
     @assert bd == -1.0 "the bifurcation at φ = $ϕ is not subcritical"
@@ -54,11 +58,12 @@ function subcritical_branch(ϕ; Nx=200)
     rho0 = real([zi[1] for zi in z]); rhoa0 = real([zi[2] for zi in z]); m0 = real([zi[3] for zi in z])
     enforce_masses!(rho0, rhoa0, ϕ, ϕa_seed)  # exact masses φ, φa
     p_seed = Params(Nx, LX, PE_STAT, ϕ, ϕa_seed; pin_idx=1)  # m[1] pinned
-    res_seed = converge_guess(pack_state(rho0, rhoa0, m0), p_seed; tol=1e-10, maxiter=80)  # Newton on the seed
+    res_seed = converge_guess(pack_state(rho0, rhoa0, m0), p_seed; tol=tol, maxiter=80)  # Newton on the seed
     # natural continuation in φa towards ϕac - 0.09; it stops where Newton fails (the fold)
-    unstable = continue_in_phia(res_seed, p_seed, ϕ; phia_target=ϕac + bd * 0.3^2, step0=0.00005, min_step=1e-6)
+    unstable = continue_in_phia(res_seed, p_seed, ϕ; phia_target=ϕac + bd * 0.3^2, step0=0.00005, min_step=1e-6, tol=tol)
     # pseudo-arclength from the last two solutions, around the fold
-    stable = continue_arclength(unstable[end-1], unstable[end], p_seed, ϕ, unstable[end].res.m[1]; ds=0.005, n_steps=1500)
+    stable = continue_arclength(unstable[end-1], unstable[end], p_seed, ϕ, unstable[end].res.m[1]; ds=0.005 * sqrt(Nx / 200),
+                                n_steps=1500, tol=tol)
     # peak-to-peak amplitudes (Δρ, Δρa, Δm) of each solution
     amps(sols) = (phia=[s.phia for s in sols], drho=[amplitudes(s.res)[1] for s in sols],
                   drhoa=[amplitudes(s.res)[2] for s in sols], dm=[amplitudes(s.res)[3] for s in sols])
@@ -68,7 +73,8 @@ end
 # Time stepping (Nx = 256, dt = 0.01) from random initial conditions at 10 values of φa from phia_start to φ (the last
 # one, φa = φ, has no passive particles and is skipped): final state type and amplitudes
 function stationary_timestepping(ϕ, phia_start; T)
-    out = (phia=Float64[], type=Symbol[], converged=Bool[], drho=Float64[], drhoa=Float64[], dm=Float64[])
+    out = (phia=Float64[], type=Symbol[], converged=Bool[], drho=Float64[], drhoa=Float64[], dm=Float64[],
+           types=NTuple{3,Symbol}[])
     for ϕa in range(phia_start, ϕ; length=10)  # 10 values of φa from phia_start to φ
         (ϕa <= 0 || ϕ - ϕa <= 0 || ϕa >= 1) && continue  # outside 0 < φa < φ, φa < 1: skipped
         # classifier run from random noise, stopped once converged
@@ -76,10 +82,11 @@ function stationary_timestepping(ϕ, phia_start; T)
                          record_interval=HISTORY)
         # whole history in data/stationary/runs
         save_history(@sprintf("stationary/runs/phi%s/phia=%.6f.jld2", ϕ, ϕa), r; ϕ, ϕa, Pe=PE_STAT, Lx=LX, pert="rand")
-        @printf("  φa = %.5f: %s (converged %s), Δρ = %.4f\n", ϕa, r.sol_type, r.converged, r.drho_eff)
+        @printf("  φa = %.5f: %s (converged %s), Δρ = %.4f%s\n", ϕa, r.sol_type, r.converged, r.drho_eff,
+                allequal(r.sol_types) ? "" : "  types of ρ, ρa, m differ: $(r.sol_types)")
         push!(out.phia, ϕa); push!(out.type, r.sol_type); push!(out.converged, r.converged)
-        # Δρ, Δρa, Δm of the classifier
-        push!(out.drho, r.drho_eff); push!(out.drhoa, r.drhoa_eff); push!(out.dm, r.dm_eff)
+        # Δρ, Δρa, Δm of the classifier and the types of ρ, ρa, m
+        push!(out.drho, r.drho_eff); push!(out.drhoa, r.drhoa_eff); push!(out.dm, r.dm_eff); push!(out.types, r.sol_types)
     end
     return out
 end
@@ -193,7 +200,7 @@ function stationary_panels(ϕ, n1, n2, n3, ts; xlims)
             plot!(p, [ϕac, phia_hi], [0.0, 0.0]; NC..., label="")  # H unstable (φa > ϕac)
         else
             plot!(p, [n1.onset; n1.phia], [0.0; getfield(n1, key)]; NC..., label=NC_LABEL)  # n = 1 branch from (onset, 0)
-            plot!(p, [0.75, n1.onset], [0.0, 0.0]; NC..., label="")  # H from φa = 0.75 to the onset
+            plot!(p, [xlims[1], n1.onset], [0.0, 0.0]; NC..., label="")  # H from the left edge to the onset
             plot!(p, [n1.onset, n1.phia[end]], [0.0, 0.0]; NC..., label="")  # H beyond the onset
             # weakly nonlinear curve
             plot!(p, n1.phia_wnl, getfield(n1, wkey); color=:black, lw=2.8, ls=:dashdot, label=WNL_STABLE_LABEL)

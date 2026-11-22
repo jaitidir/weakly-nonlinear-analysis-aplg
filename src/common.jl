@@ -1,5 +1,9 @@
 # Shared by all the notebooks: packages, folders, loading/saving data, figure style, legends and videos.
-using LinearAlgebra, Statistics, Printf, Random, JLD2, FFTW, Plots, LaTeXStrings, Base64
+using LinearAlgebra, Statistics, Printf, Random, JLD2, FFTW, Plots, LaTeXStrings, Base64, StableRNGs
+
+# The one source of random numbers of the project: a local generator from an integer seed, passed to rand(rng, ...).
+# StableRNG gives the same numbers on every Julia version and machine, and the global generator is never touched.
+seeded_rng(seed::Integer) = StableRNG(seed)
 
 const ROOT = dirname(@__DIR__)
 const DATA = joinpath(ROOT, "data")        # data/<notebook>/<file>.jld2

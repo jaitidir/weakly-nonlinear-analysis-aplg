@@ -18,14 +18,20 @@ const KICK_AMP = 1e-4
 rescale_mass(rho, rhoa, m, ϕa_new) = (copy(rho), rhoa .* (ϕa_new / mean(rhoa)), copy(m))
 # Zero-mean random perturbation of size KICK_AMP (seed 1000 + k), so that an unstable state can leave
 function kick(rho, rhoa, m, k)
-    Random.seed!(1000 + k)
-    n = [rand(length(rho)) .- 0.5 for _ in 1:3]  # uniform noise for each field
+    rng = seeded_rng(1000 + k)
+    n = [rand(rng, length(rho)) .- 0.5 for _ in 1:3]  # uniform noise for each field
     # zero mean, largest |value| = KICK_AMP
     n = [(v .- mean(v)) .* (KICK_AMP / maximum(abs, v .- mean(v))) for v in n]
     return (rho .+ n[1], rhoa .+ n[2], m .+ n[3])
 end
-# dominant Fourier mode n ≥ 1 of ρ (number of wavelengths)
-dominant_n(rho) = argmax(abs.(fft(rho .- mean(rho))[2:end÷2]))
+# Number of wavelengths n ≥ 1 of a run: the dominant Fourier mode of ρ in its final state or, for a CP or MPS, of the
+# power |ρ̂_k|² averaged over its last period (records every HISTORY): a single snapshot can catch the first mode of a
+# standing wave passing through zero, when the second dominates
+function dominant_n(res)
+    rows = res.sol_type in (:CP, :MPS) ?
+        [Float64.(r) for (s, r) in zip(res.rec.t, res.rec.rho) if s >= res.rec.t[end] - res.period] : [res.rho]
+    return argmax(sum(abs2.(fft(r .- mean(r))[2:end÷2]) for r in rows))
+end
 
 """
 Continuation chain by time stepping (Nx = 256, dt = 0.01): the first run from random noise, every later run from the
@@ -38,22 +44,24 @@ function hysteresis_chain(ϕ, direction; down=nothing)
     cfg = CHAIN_SETTINGS[ϕ]; h_min = cfg.h0 / 8  # smallest step: h0/8
     seed_offset = direction == "down" ? 0 : 5000  # different kick seeds for the two chains
     common = (T=60000.0, dt=0.01, seed=1, save_interval=20.0, record_interval=HISTORY)
-    # one entry per run (accepted or not): label, φa, type, converged, Δρ, Δρa, Δm, run, n, stop time, accepted, h
+    # one entry per run (accepted or not): label, φa, type (of ρ), converged (all three fields), Δρ, Δρa, Δm, run, n,
+    # stop time, accepted, h, types of ρ, ρa, m
     out = (pert=String[], phia=Float64[], type=Symbol[], converged=Bool[], drho=Float64[], drhoa=Float64[], dm=Float64[],
-           step=Int[], n=Int[], t_stop=Float64[], accepted=Bool[], h=Float64[])
+           step=Int[], n=Int[], t_stop=Float64[], accepted=Bool[], h=Float64[], types=NTuple{3,Symbol}[])
     # print, store and save the history of run k
     function record!(k, ϕa, res, acc, h)
-        @printf("[run %2d] φa = %.5f  h = %.5f  %-3s n = %d  t = %.0f  %s\n", k, ϕa, h, res.sol_type, dominant_n(res.rho), res.t,
-                acc ? "accepted" : "rejected")
+        @printf("[run %2d] φa = %.5f  h = %.5f  %-3s n = %d  t = %.0f  %s%s\n", k, ϕa, h, res.sol_type, dominant_n(res), res.t,
+                acc ? "accepted" : "rejected", allequal(res.sol_types) ? "" : "  types of ρ, ρa, m differ: $(res.sol_types)")
         # values in the order of the fields of out
         for (f, v) in zip(keys(out), (direction == "down" ? "continuation" : "continuation up", ϕa, res.sol_type, res.converged,
-                                      res.drho_eff, res.drhoa_eff, res.dm_eff, k, dominant_n(res.rho), res.t, acc, h))
+                                      res.drho_eff, res.drhoa_eff, res.dm_eff, k, dominant_n(res), res.t, acc, h,
+                                      res.sol_types))
             push!(getfield(out, f), v)
         end
         save_history(@sprintf("hysteresis/runs/phi%s/%s/run%02d_phia=%.6f.jld2", ϕ, direction, k, ϕa), res;
                      ϕ, ϕa, Pe=PE, Lx=LX, step=k, accepted=acc, h)
     end
-    branch(res) = (res.sol_type, dominant_n(res.rho))  # (type, number of wavelengths)
+    branch(res) = (res.sol_type, dominant_n(res))  # (type, number of wavelengths)
     down_phia = direction == "up" ? down.phia[down.accepted] : Float64[]  # φa of the accepted down runs
     # φa of the next run: down cur - h; up cur + h, or with the normal step the next half-grid point of the down chain
     function next_trial(cur, h)
@@ -232,7 +240,7 @@ end
 # window and run, so that fast motion shows as texture instead of aliasing into false slow drifts
 function kymo(rec, ax::TimeAxis)
     t = rec.t; ρ = rec.rho; seg = rec.segments; w = ax.Dmax / HKS.ncol  # w: display width of a column
-    rng = MersenneTwister(1); Z = zeros(size(ρ, 2) + 1, HKS.ncol)
+    rng = seeded_rng(1); Z = zeros(size(ρ, 2) + 1, HKS.ncol)
     for c in 1:HKS.ncol
         # column c: its centre tc and its time window [t1, t2]
         tc = Tinv(ax, (c - 0.5) * w); t1 = Tinv(ax, (c - 1) * w); t2 = Tinv(ax, c * w)

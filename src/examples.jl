@@ -13,7 +13,7 @@ load_src("weakly_nonlinear.jl"); load_src("timestepping.jl"); load_src("bt_ampli
 The time-stepping run of the bifurcation diagrams at (φ, φa, Pe) from initial condition `ic` (Nx = 256, dt = 0.01; the
 oscillatory sweep's settings for "double"/"non-symmetric", the stationary diagram's for "rand"), stopped by the
 classifier, then continued for 'warmup' time to check for possible transients and then recorded (all fields every `rint`) for `Trec` after 
-fully confirming convergence. The period is the return time of ρ(x, t) without shift (NaN for a PS).
+fully confirming convergence. The period is the classifier's (for a T, Lx/|c|, its return time without shift; NaN for a PS).
 """
 function solution_fields(ϕ, ϕa, Pe, ic; warmup, Trec=600.0, rint=0.5, Lx=10.0, Nx=256, dt=0.01)
     # classifier run from the perturbed homogeneous state, stopped once converged
@@ -28,6 +28,7 @@ function solution_fields(ϕ, ϕa, Pe, ic; warmup, Trec=600.0, rint=0.5, Lx=10.0,
                      pert_Ap=2.0, pert_Am=1.0, seed=1, save_interval=20.0, record_interval=HISTORY)
     end
     @printf("time stepping stopped at t = %.0f: %s\n", run0.t, run0.sol_type)
+    run0.converged || error("the classifier did not converge by t = $(run0.t)")
     # continue from a state, without the classifier
     run_(state, T; kw...) = run_spectral(ϕ, ϕa, Pe, Lx, Nx; init_fields=state, T=T, dt=dt, classify=false, save_interval=100.0, kw...)
     w = run_((run0.rho, run0.rhoa, run0.m), warmup; record_interval=HISTORY)  # warm-up after the classifier stopped
@@ -38,13 +39,11 @@ function solution_fields(ϕ, ϕa, Pe, ic; warmup, Trec=600.0, rint=0.5, Lx=10.0,
     # history: classifier run and warm-up, times continuous (the warm-up's t = 0 dropped)
     hist = (hist_t=vcat(run0.rec.t, run0.t .+ w.rec.t[2:end]), hist_rho=H32(run0.rec.rho, w.rec.rho),
             hist_rhoa=H32(run0.rec.rhoa, w.rec.rhoa), hist_m=H32(run0.rec.m, w.rec.m))
-    lags = round(Int, 10/rint):size(rho, 1) ÷ 2  # lags (in rows) from 10 time units to half the record
-    # mean squared difference between ρ(t + L rint) and ρ(t), without shift
-    err = [sum(abs2, rho[1+L:end, :] .- rho[1:end-L, :]) / (size(rho, 1) - L) for L in lags]
     sol_type = string(run0.sol_type)
-    # t: absolute times (classifier run + warm-up + record); period: the lag of the smallest difference (a multiple
-    # of rint)
-    return (t=res.rec.t .+ (run0.t + warmup), rho=rho, rhoa=rhoa, m=m, period=(sol_type == "PS" ? NaN : lags[argmin(err)] * rint),
+    # period: the classifier's for a CP; for a T the time to travel the box, Lx/|c|; none for a PS
+    period = sol_type == "CP" ? run0.period : (sol_type == "T" ? Lx / abs(run0.speed) : NaN)
+    # t: absolute times (classifier run + warm-up + record)
+    return (t=res.rec.t .+ (run0.t + warmup), rho=rho, rhoa=rhoa, m=m, period=period,
             ϕ=ϕ, ϕa=ϕa, Pe=Pe, Lx=Lx, dt=dt, sol_type=sol_type, t_classified=run0.t, warmup=warmup, hist...)
 end
 
@@ -53,19 +52,27 @@ end
 
 The modulated PS: run rand_s1.84 of the Bogdanov–Takens notebook (data/bogdanov_takens/mps_runs; from small noise on
 the path μ¹ < 0) continued from its final state for nper periods with the same Nx and dt, recording all fields every
-time unit; period from the modulated-PS test.
+time unit. rand_s1.84 is a fixed-length run, so its end is classified here as run_spectral does: ρ, ρa and m each on
+their own (modulated-PS test), and all three must be a converged MPS; type and period of the run are those of ρ.
 """
 function mps_fields(nper)
     f = loaddata("bogdanov_takens/mps_runs/rand_s1.84.jld2")  # the MPS run from noise (bogdanov_takens notebook)
-    # period from the modulated-PS test over its last 40000 time units
-    P = classify_modulated_ps(f.t, Float64.(f.rho); window=40000.0, Lx=10.0).period
+    # ρ, ρa and m classified on their own over the end of the run
+    rs = [classify_modulated_ps(f.t, Float64.(F); pwindow=40000.0, Lx=10.0) for F in (f.rho, f.rhoa, f.m)]
+    for (n, r) in zip(("ρ", "ρa", "m"), rs)
+        @printf("%-2s: %s  converged = %s  period = %.3f  %s\n", n, r.type, r.converged, something(r.period, NaN), r.detail)
+    end
+    all(r -> r.converged && r.type == :MPS, rs) || error("the end of rand_s1.84 is not a converged MPS in all three fields")
+    P = rs[1].period
     # continue from its final state for nper periods
     res = run_spectral(f.ϕ, f.ϕa, f.Pe, 10.0, f.Nx; init_fields=(copy(f.rho_end), copy(f.rhoa_end), copy(f.m_end)),
                        T=nper*P, dt=f.dt, classify=false, save_interval=100.0, record_interval=1.0)
     M(v) = permutedims(reduce(hcat, v))
     # times continue from the end of rand_s1.84
     return (t=res.rec.t .+ f.t[end], rho=M(res.rec.rho), rhoa=M(res.rec.rhoa), m=M(res.rec.m), period=P, ϕ=f.ϕ, ϕa=f.ϕa,
-            Pe=f.Pe, K1t=f.K1t, ηt=f.ηt, s=f.s, μ1=f.μ1, δ=f.δ, dt=f.dt, scheme=f.scheme, Lx=10.0, sol_type="MPS")
+            Pe=f.Pe, K1t=f.K1t, ηt=f.ηt, s=f.s, μ1=f.μ1, δ=f.δ, dt=f.dt, scheme=f.scheme, Lx=10.0, sol_type="MPS",
+            sol_types=Tuple(string(r.type) for r in rs), periods=Tuple(r.period for r in rs), drho=rs[1].drho_eff,
+            drhoa=rs[2].drho_eff, dm=rs[3].drho_eff)
 end
 
 # ==================================================================================================================
@@ -73,18 +80,21 @@ end
 # ==================================================================================================================
 
 # phases: times of the four profiles of a CP or MPS (fractions of the period from the largest |ρ̂₁|; one profile, at the
-# first, for a PS or T); nper: periods in the kymographs (a PS spans ps_window); profile_ylims: nothing = from the data;
+# first, for a PS or T), the weakly nonlinear profiles at the same times; nper: periods in the kymographs (a PS spans
+# ps_window); profile_ylims: nothing = from the data;
 # size, heights: in px at 100 dpi and row heights (profiles, weakly nonlinear profiles, kymographs; without the second
 # row for a PS, T or MPS); gap, side: widths of the gap and of the right-hand column (legend, colour bars, triangle);
-# wnl_pde_times: the weakly nonlinear profiles at the same times as the time stepping (else at the same fractions of
-# its own period); comp_centre, comp_reach: the composition (ρa, ρ0) is zoomed about its mean, placed at comp_centre of the colour triangle,
+# comp_centre, comp_reach: the composition (ρa, ρ0) is zoomed about its mean, placed at comp_centre of the colour triangle,
 # so that its largest deviation reaches comp_reach; arrow: direction of travel of a T (x ends and height as fractions of
 # the panel, headroom left above the curves)
-const EXAMPLE_SETTINGS = (phases=(0.0, 0.25, 0.5, 0.75), nper=2, ps_window=200.0, profile_ylims=nothing, wnl_pde_times=false,
+const EXAMPLE_SETTINGS = (phases=(0.0, 0.25, 0.5, 0.75), nper=2, ps_window=200.0, profile_ylims=nothing,
                           size=(1700, 1260), heights=[3.2, 3.2, 5.6], size_single=(1700, 900), heights_single=[3.2, 5.4],
                           FS=18, GFS=24, legend_fs=24, tri_fs=18, lw=2.8, gap=0.09, side=0.17,
                           comp_centre=(0.45, 0.45), comp_reach=0.35, arrow=(x=(0.40, 0.60), y=0.9, headroom=0.3))
-const MPS_SETTINGS = merge(EXAMPLE_SETTINGS, (nper=1, wnl_pde_times=true))
+const MPS_SETTINGS = merge(EXAMPLE_SETTINGS, (nper=1,))
+
+# |ρ̂₁| (first Fourier mode) of each row of ρ
+mode1_amplitude(rho) = [abs(fft(r)[2]) / length(r) for r in eachrow(rho)]
 
 # Composition colour of (ρa, ρ0): hue from blue (ρ0 only) to red (ρa only) through green, mixed with white by 1 - ρ
 function tern(a, b)
@@ -145,8 +155,7 @@ function example_figure(d; S=EXAMPLE_SETTINGS, wnl=true)
     per(v) = vcat(v, v[1:1])  # periodic closure of a profile
     # PS: no period, the kymograph spans ps_window
     stationary = isnan(d.period); P = stationary ? S.ps_window/S.nper : d.period
-    # |ρ̂₁| of each row
-    a1 = [abs(sum(ρ[i, :] .* exp.(-2π*im .* (0:nx-1) ./ nx))/nx) for i in axes(ρ, 1)]
+    a1 = mode1_amplitude(ρ)  # |ρ̂₁| of each row
     # j0: largest |ρ̂₁| in the first period (t = 0 of the figure); j: rows over nper periods from j0
     j0 = stationary ? 1 : argmax(a1[t .< t[1] + P]); j = findall(s -> t[j0] <= s <= t[j0] + S.nper*P, t)
     phases = typ in ("CP", "MPS") ? S.phases : S.phases[1:1]  # four phases for a CP or MPS, one for a PS or T
@@ -157,9 +166,8 @@ function example_figure(d; S=EXAMPLE_SETTINGS, wnl=true)
     times = [[t[i] - t[j0] for i in idx]]  # their times from t[j0]
     c_T = 0.0
     if wnl
-        wf, Pw, c_T = aligned_wnl(d, j0)
-        # weakly nonlinear times: those of the time stepping, or the same phases of its own period
-        tw = S.wnl_pde_times ? times[1] : [ph * (isnan(Pw) ? 0.0 : Pw) for ph in phases]
+        wf, _, c_T = aligned_wnl(d, j0)
+        tw = times[1]  # weakly nonlinear profiles at the same times as the time stepping
         Fs = [wf(τ) for τ in tw]
         # weakly nonlinear profiles (ρ, ρa, ρ0 = ρ - ρa, m)
         push!(curves, [(sub(F[1, :]), sub(F[2, :]), sub(F[1, :] .- F[2, :]), sub(F[3, :])) for F in Fs])
@@ -297,8 +305,7 @@ function cp_t_video(dCP, dT; nper=4, dt_frame=1.0, fps=25, size=(1100, 1000), na
     function prep(d)
         # (size is a keyword here: size_ is Base.size)
         t = d.t; P = d.period; ρ = d.rho; nx = size_(ρ, 2)
-        # |ρ̂₁| of each row
-        a1 = [abs(sum(ρ[i, :] .* exp.(-2π*im .* (0:nx-1) ./ nx))/nx) for i in axes(ρ, 1)]
+        a1 = mode1_amplitude(ρ)  # |ρ̂₁| of each row
         j0 = argmax(a1[t .< t[1] + P])  # t = 0 at the largest |ρ̂₁| in the first period
         wf, Pw, _ = aligned_wnl(d, j0)
         j = findall(s -> t[j0] <= s <= t[j0] + nper*P + 1e-9, t)  # rows over nper periods
@@ -334,8 +341,9 @@ function cp_t_video(dCP, dT; nper=4, dt_frame=1.0, fps=25, size=(1100, 1000), na
     return save_video(anim, name; fps=fps)
 end
 
-# The three fields of the MPS over its last nper periods, one frame every dt_frame; thin grey: the profiles at the largest
-# and smallest |ρ̂₁| of the cycle; dotted: the means
+# The three fields of the MPS over its last nper periods against the weakly nonlinear MPS (bt_mps_wnl, aligned with the
+# time stepping at the largest |ρ̂₁| of the cycle and then in real time), one frame every dt_frame; thin grey: the
+# time-stepping profiles at the largest and smallest |ρ̂₁| of the cycle; dotted: the means
 function mps_video(d; nper=2, dt_frame=20.0, name="06 Modulated Pattern (MPS).mp4")
     t = d.t; P = d.period
     F = (Float64.(d.rho), Float64.(d.rhoa), Float64.(d.m))
@@ -343,20 +351,28 @@ function mps_video(d; nper=2, dt_frame=20.0, name="06 Modulated Pattern (MPS).mp
     frames = shown[1:max(1, round(Int, dt_frame/(t[2] - t[1]))):end]  # rows of the frames
     a1 = mode1_amplitude(F[1])  # |ρ̂₁| of each row
     jmax, jmin = shown[argmax(a1[shown])], shown[argmin(a1[shown])]  # rows of the largest and smallest |ρ̂₁| (grey profiles)
+    wf, _, _ = aligned_wnl(d, jmax)                  # weakly nonlinear fields τ after row jmax (its maximum there)
+    Wf = Dict(j => wf(t[j] - t[jmax]) for j in frames)  # 3 × nx (ρ, ρa, m) at each frame
     x = range(0, d.Lx; length=size(F[1], 2) + 1)
     per(v) = vcat(v, v[1:1])
     means = (d.ϕ, d.ϕa, 0.0); labels = (L"\rho", L"\rho_a", L"m")  # means (dotted) and axis labels of ρ, ρa, m
-    # y range of each field over the shown rows
-    ylims_ = [let (lo, hi) = extrema(f[shown, :]); (lo - 0.1(hi - lo), hi + 0.1(hi - lo)) end for f in F]
-    ttl = latexstring(@sprintf("\\mathrm{MPS}:\\quad \\phi = %.5f,\\quad \\phi_a = %.6f,\\quad \\mathrm{Pe} = %.5f", d.ϕ, d.ϕa, d.Pe))
+    # y range of each field over the shown rows and the weakly nonlinear frames (room for the legend in the first panel)
+    ylims_ = [let (lo, hi) = extrema(vcat(vec(F[k][shown, :]), [Wf[j][k, :] for j in frames]...))
+                  (lo - 0.1(hi - lo), hi + (k == 1 ? 0.3 : 0.1)*(hi - lo)) end for k in 1:3]
+    wnl_color = RGB(0xe8/255, 0x31/255, 0x2a/255)
     anim = @animate for j in frames
+        ttl = latexstring(@sprintf("\\mathrm{MPS}:\\quad \\phi = %.5f,\\quad \\phi_a = %.6f,\\quad \\mathrm{Pe} = %.5f,\\quad t = %.0f",
+                                   d.ϕ, d.ϕa, d.Pe, t[j] - t[shown[1]]))
         ps = map(1:3) do k
             f = F[k]
             p = hline([means[k]]; color=:gray60, ls=:dot, lw=1.5, label="")
             plot!(p, x, per(f[jmax, :]); color=:gray70, lw=1.5, label="")
             plot!(p, x, per(f[jmin, :]); color=:gray70, lw=1.5, label="")
-            plot!(p, x, per(f[j, :]); color=:black, lw=3, ylims=ylims_[k], xlims=(0, d.Lx), ylabel=labels[k], label="",
-                  xlabel=k == 3 ? L"x" : "", xformatter=k == 3 ? :auto : _ -> "", framestyle=:box, grid=false, title=k == 1 ? ttl : "")
+            plot!(p, x, per(f[j, :]); color=:black, lw=3, label=k == 1 ? "time stepping      " : "")
+            plot!(p, x, per(Wf[j][k, :]); color=wnl_color, ls=:dash, lw=3, label=k == 1 ? "weakly nonlinear" : "",
+                  ylims=ylims_[k], xlims=(0, d.Lx), ylabel=labels[k], xlabel=k == 3 ? L"x" : "",
+                  xformatter=k == 3 ? :auto : _ -> "", framestyle=:box, grid=false, title=k == 1 ? ttl : "",
+                  legend=k == 1 ? :top : false, legend_column=2, legendfontsize=14, foreground_color_legend=nothing)
         end
         plot(ps...; layout=grid(3, 1), size=(1000, 1100), dpi=VIDEO_DPI, fontfamily="sans-serif", titlefontsize=17,
              guidefontsize=18, tickfontsize=12, left_margin=8Plots.mm, right_margin=4Plots.mm, bottom_margin=3Plots.mm, top_margin=3Plots.mm)
