@@ -18,9 +18,6 @@ The code does the following:
 - hysteresis by time-stepping continuation;
 - the same weakly nonlinear analysis for the Cahn–Hilliard equation, as a reference case.
 
-Every figure is built from computed data (amplitude equations, Newton continuation or time stepping). No curve is
-drawn by hand.
-
 ---
 
 ## 1. Model
