@@ -1,11 +1,11 @@
-# Active–passive lattice gas: weakly nonlinear analysis, bifurcations and the Bogdanov–Takens point
+# Weakly Nonlinear Analysis of the Active–Passive Lattice Gas
 
-Julia code for the pattern-forming instabilities of the hydrodynamic equations of the active–passive lattice gas
-(APLG). The homogeneous state can lose stability in two ways:
-- **stationary instability**: a real eigenvalue crosses zero and a stationary pattern (PS) appears;
-- **oscillatory instability**: a complex pair crosses the imaginary axis and travelling (T) or counter-propagating (CP)
-  waves appear.
+This repository contains Julia code for the weakly nonlinear analysis of the hydrodynamic equations of the
+active–passive lattice gas (APLG). It covers the stationary and oscillatory instabilities of the homogeneous state, the
+Bogdanov–Takens point where they meet, Newton continuation of the exact solutions, and time stepping of the full
+equations. The same weakly nonlinear analysis is done for the Cahn–Hilliard equation as a reference case.
 
+<<<<<<< HEAD
 At the codimension-two point where both instabilities happen together (a Bogdanov–Takens point with O(2) symmetry) a
 modulated stationary pattern (MPS) also appears.
 
@@ -51,31 +51,36 @@ $(\rho,\rho_a,m)=(\phi,\phi_a,0)$. The spinodal diagrams use $\nu=(\phi-\phi_a)/
 divided by the vacancy density.
 
 Solution types used throughout:
+=======
+The solution types in the code and the figures are:
+>>>>>>> dda6c9b (Latest version)
 
 | name | solution |
 |---|---|
 | H | homogeneous state |
-| PS | stationary pattern (steady, reflection symmetric) |
-| T | travelling wave $U(x+ct)$ (breaks reflection symmetry) |
-| CP | counter-propagating pattern: standing wave, time-periodic, reflection symmetric |
-| MPS | modulated PS: a PS whose amplitude oscillates in time, near the Bogdanov–Takens point |
+| PS | stationary pattern |
+| T | travelling wave |
+| CP | counter-propagating pattern (standing wave) |
+| MPS | modulated stationary pattern (near the Bogdanov–Takens point) |
 
----
+## 1. System Requirements
 
-## 2. Linear stability ([src/weakly_nonlinear.jl](src/weakly_nonlinear.jl))
+### Software Dependencies
+- Operating System: macOS, Linux or Windows
+- Julia: version 1.12 or later
+- Jupyter with the IJulia kernel, to run the notebooks
+- Required packages: see `Project.toml`
 
-Perturbations $\propto e^{iqx+\sigma t}$ about H obey $\sigma\,\hat u=L(q)\,\hat u$ with
+### Tested Versions
+- Julia 1.12.4 on macOS
 
-$$
-L(q)=\begin{pmatrix}
--q^2 & 0 & -iq\,\mathrm{Pe}(1-\phi)\\
--\phi_a q^2 & -(1-\phi)q^2 & -iq\,\mathrm{Pe}(1-\phi)\\
-iq\,\mathrm{Pe}\,\phi_a & -iq\,\mathrm{Pe}(1-\phi) & -(1-\phi)q^2-2
-\end{pmatrix}.
-$$
+### Hardware Requirements
+- A standard desktop or laptop computer
+- No specialised hardware is needed
 
-The two thresholds in $\phi_a$ at wavenumber $q$ are:
+## 2. Installation Guide
 
+<<<<<<< HEAD
 - **Stationary** ($\det L=0$, a real eigenvalue crosses zero):
   $$\phi_a^{\rm st}(q)=\frac{2+(1-\phi)\mathrm{Pe}^2+(1-\phi)q^2}{2\,\mathrm{Pe}^2(1-\phi)}.$$
 - **Oscillatory** (Routh–Hurwitz, a pair $\pm i\omega$ crosses). This threshold is meaningful only where $\omega^2>0$:
@@ -326,74 +331,127 @@ through exact hydrodynamic analysis*, Nat. Commun. **16** (2025), for $d_s(\rho)
 ---
 
 ## 5. Notebooks, figures and videos
+=======
+Clone this repository:
+>>>>>>> dda6c9b (Latest version)
 
 ```
-notebooks/   one notebook per topic; each makes its figures and videos
-src/         all the code, included by the notebooks (one file per notebook + shared files)
-data/        the data of every figure, one folder per notebook
-images/      every figure, as pdf
-videos/      every video, as mp4
+git clone https://github.com/jaitidir/weakly-nonlinear-analysis-aplg
+cd weakly-nonlinear-analysis-aplg
 ```
 
-| notebook (source) | what it does | figures (`images/`) | videos |
-|---|---|---|---|
-| `stationary.ipynb` ([stationary.jl](src/stationary.jl)), Pe = 4.5 | Spinodals with the binodal. Bifurcation diagrams at φ = 0.81 (supercritical) and 0.7 (subcritical): Newton branches with n = 1, 2, 3 wavelengths, the weakly nonlinear curves (§3.1) and time stepping. | `stationary_spinodals`, `stationary_bifurcation_phi0.81`, `stationary_bifurcation_phi0.7`, `stationary_bifurcation_rho` (Δρ only: (a) φ = 0.7, (b) φ = 0.81) | |
-| `oscillatory.ipynb` ([oscillatory.jl](src/oscillatory.jl)), Pe = 6 | Speed of T against δ. Spinodals classified by the T/CP analysis (§3.2). At φ = 0.7, 0.805, 0.88, 0.905, 0.915: Newton T and PS branches, weakly nonlinear T, CP and PS, and a time-stepping sweep from the four initial conditions. Shaded spinodal: the $(\phi,\nu)$ plane coloured by the solution the weakly nonlinear analysis expects near the spinodal, with the final states of the sweeps on top. | `oscillatory_speed_phi0.88`, `oscillatory_spinodals`, `oscillatory_bifurcation_phi<φ>` (+ `_rho`), `oscillatory_spinodals_shaded` | |
-| `examples.ipynb` ([examples.jl](src/examples.jl)) | Fields, profiles and kymographs of a PS (φ = 0.81), a CP and a T (φ = 0.88) and the MPS (φ = 0.88998), each against its weakly nonlinear solution | `example_PS_phi0.81`, `example_CP_phi0.88`, `example_T_phi0.88`, `example_MPS_phi0.88998` | 01, 06 |
-| `hysteresis.ipynb` ([hysteresis.jl](src/hysteresis.jl)) | Down and up chains at φ = 0.905 and 0.915 on the Δρ diagram, with kymographs and φa(t) | `hysteresis_kymograph` | 02–05 |
-| `bogdanov_takens.ipynb` ([bogdanov_takens.jl](src/bogdanov_takens.jl), [bt_amplitude.jl](src/bt_amplitude.jl)) | Coefficients against φ. Two-parameter diagram in (K₁, η¹), to scale and schematic. One-parameter diagrams along the two paths. MPS from noise and its gluing into CP in the PDE (§3.3). | `bt_K2K3_ratio`, `bt_two_parameter`, `bt_two_parameter_schematic`, `bt_paths`, `bt_homoclinic_phase` | 07 |
-| `cahn_hilliard.ipynb` ([cahn_hilliard.jl](src/cahn_hilliard.jl)) | Newton steady profiles against the weakly nonlinear profile (φ₀ = 0.1, 0.5). Supercritical and subcritical bifurcation diagrams. The fold near the tricritical point against the quintic equation (§3.4). | `cahn_hilliard_profiles`, `cahn_hilliard_bifurcation`, `cahn_hilliard_fold` | |
-
-Shared files: [common.jl](src/common.jl) has the folders, loading and saving of data, figure style, legends and videos.
-
-**Line styles in the diagrams:**
-- continuous blue: numerical continuation (Newton);
-- dash-dot: weakly nonlinear, stable;
-- dashed: weakly nonlinear, unstable or saddle;
-- markers: final states of time stepping.
-
-The weakly nonlinear stability is stability *within the amplitude equation*, against perturbations in the branch's own
-modes. For example, the stationary n = 2 branch is stable for its amplitude equation even though the n = 1 mode
-destabilises it in the full box.
-
----
-
-## 6. Running
-
-Install the packages once (Julia 1.12), from the project folder:
+Install the dependencies from Julia, in the project folder:
 
 ```julia
-using Pkg; Pkg.activate("."); Pkg.instantiate()
+using Pkg
+Pkg.activate(".")
+Pkg.instantiate()
 ```
 
-Then open a notebook (Jupyter with the IJulia kernel) and run all its cells, or run it headless:
+Installation takes a few minutes; most of it is the precompilation of the packages.
+
+## 3. Demo
+
+The notebook `notebooks/examples.ipynb` shows the main features of the code. Open it in Jupyter (IJulia kernel) and
+run all cells.
+
+### Expected Output
+A PS, a CP, a T and an MPS from time stepping, each compared with its weakly nonlinear solution: profiles of the fields
+at several times and kymographs (`images/example_*.pdf`), and the videos 01 and 06 in `videos/`.
+
+### Expected Run Time
+With the saved data (the default), the notebook only makes the figures. Recomputing the data takes:
+- PS, CP and T fields: about 10 minutes
+- MPS fields: a few minutes
+- videos: a few minutes
+
+## 4. Instructions for Use
+
+Start Julia in the project folder (`julia --project=.`) and load the code:
+
+```julia
+include("src/common.jl")
+load_src("weakly_nonlinear.jl"); load_src("newton.jl"); load_src("timestepping.jl"); load_src("bt_amplitude.jl")
+```
+
+The parameters are the total density `ϕ`, the active density `ϕa`, the Péclet number `Pe` and the box length `Lx`
+(`Lx = 10` throughout).
+
+### Onset of Instability
+Critical wavenumber, onset `ϕac`, frequency at onset and type of instability (`:stationary` or `:oscillatory`):
+
+```julia
+qc, ϕac, wc, kind = find_qc_phiac_wc(0.81, 4.5, 10.0)
+```
+
+### Time Stepping
+Solve the full equations (pseudospectral, SBDF2) from a perturbed homogeneous state, with `Nx` grid points, until the
+solution converges or `T` is reached:
+
+```julia
+r = run_spectral(0.81, 0.782, 4.5, 10.0, 256; T=5000.0, pert_type="rand")
+r.sol_type, r.converged, r.drho_eff     # (:PS, true, 0.159)
+```
+
+The final fields are `r.rho`, `r.rhoa` and `r.m`. Other initial perturbations are `"non-symmetric"`, `"double"` and
+`"biased"` (travelling modes; see `run_spectral` in `src/timestepping.jl`).
+
+### Newton Continuation
+Steady branch near a stationary onset, started from the weakly nonlinear solution and compared with it:
+
+```julia
+qc, ϕac = find_qc_and_phiac(0.81, 4.5, 10.0)
+b = bifurcation_scan(0.81, 4.5, 10.0, 400, qc, ϕac, 1.0; eps_max=0.01)
+b.phia, b.drho          # Newton branch
+b.phia_wnl, b.drho_wnl  # weakly nonlinear branch
+```
+
+### Bogdanov–Takens Point
+Coefficients of the amplitude equation at the Bogdanov–Takens point for a given `ϕ`:
+
+```julia
+c = bt_coefficients(0.88998)
+c.Pe, c.ϕas, c.Γ, c.K2, c.K3
+```
+
+### Saved Data
+Every dataset is saved in `data/<notebook>/` and can be loaded with `loaddata`, for example
+
+```julia
+d = loaddata("oscillatory/runs/phi0.88/rand/phia=0.666500.jld2")
+d.type, d.t, d.rho
+```
+
+## 5. Reproduction Instructions
+
+The notebooks in `notebooks/` reproduce all the figures (`images/`) and videos (`videos/`):
+
+| notebook | contents |
+|---|---|
+| `stationary.ipynb` | stationary spinodals and bifurcation diagrams (Pe = 4.5) |
+| `oscillatory.ipynb` | oscillatory spinodals, speed of T and bifurcation diagrams (Pe = 6) |
+| `examples.ipynb` | PS, CP, T and MPS against their weakly nonlinear solutions |
+| `hysteresis.ipynb` | hysteresis by time-stepping continuation |
+| `bogdanov_takens.ipynb` | coefficients, bifurcation diagrams and the MPS near the Bogdanov–Takens point |
+| `cahn_hilliard.ipynb` | weakly nonlinear analysis of the Cahn–Hilliard equation |
+
+Each notebook takes its data from `data/`. The first cell has flags such as `COMPUTE = (branches=false, ...)`: `false`
+loads the saved data and `true` computes it again. The cell also gives the approximate run time of each computation;
+the time-stepping sweeps take several hours.
+
+A notebook can also be run from the terminal:
 
 ```
 jupyter nbconvert --to notebook --execute --inplace notebooks/<name>.ipynb
 ```
 
-The first cell of each notebook has flags such as `COMPUTE = (name=false, ...)`:
-- `false` loads a dataset from `data/`;
-- `true` computes it again and saves it there.
+## Contributing
 
-The cell says roughly how long each one takes; the time-stepping sweeps and chains take hours. Two notebooks depend on
-others:
-- the hysteresis notebook uses the Newton branches of the oscillatory notebook;
-- the examples notebook uses the MPS run of the Bogdanov–Takens notebook.
+This project was developed by Jesus Ait Idir. The binodal code (`src/binodal.jl`) is adapted from the code of
+[Mason, Jack and Bruna](https://github.com/mbruna/Nonreciprocal_APLG).
 
-Every time-stepping run is stored in full. The files are:
-- `data/stationary/runs/phi<φ>/phia=<φa>.jld2`
-- `data/oscillatory/runs/phi<φ>/<perturbation>/phia=<φa>.jld2`
-- `data/hysteresis/runs/phi<φ>/<down|up>/run<k>_phia=<φa>.jld2` (rejected runs included)
-- `data/bogdanov_takens/` (MPS and homoclinic runs, including the ramps)
-
-Each holds:
-- `t`, the recorded times;
-- `rho`, `rhoa`, `m` at those times, one row per time (Float32);
-- the result of the run and its settings.
-
-To load one: `loaddata("oscillatory/runs/phi0.88/rand/phia=0.666500.jld2")`.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License, see [LICENSE](LICENSE.md).
+This project is licensed under the MIT No Attribution License. See the [LICENSE](LICENSE.md) file for details.
