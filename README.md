@@ -12,7 +12,7 @@ The solution types in the code and the figures are:
 | H | homogeneous state |
 | PS | stationary pattern |
 | T | travelling wave |
-| CP | counter-propagating pattern (standing wave) |
+| CP | counter-propagating pattern |
 | MPS | modulated stationary pattern (near the Bogdanov–Takens point) |
 
 ## 1. System Requirements
